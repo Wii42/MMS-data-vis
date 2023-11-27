@@ -1,6 +1,8 @@
 import matplotlib.pyplot as plt
 import numpy as np
+from kmodes.kmodes import KModes
 from scipy.cluster.hierarchy import dendrogram, linkage
+from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
 
 
@@ -103,19 +105,44 @@ if __name__ == '__main__':
             l.append(val)
         dimensions.append(l)
 
-    data = list(zip(d for d in dimensions))
+    data = list(d for d in dimensions)
+    persons = []
+    for i in range(len(data[0])):
+        p = []
+        for j in range(len(data)):
+            p.append(data[j][i])
+        persons.append(p)
 
-    print(len(data))
+    print(len(persons))
+    print(len(persons[0]))
 
-    from sklearn.manifold import TSNE
+    persons = np.array([np.array(xi) for xi in persons])
+    # np_array = np.array([[1,1,1,1], [5,2,1,1], [1,2,1,1], [10,2,1,1], [4,-1,1,1]]) #np.array([np.array(xi) for xi in data])
 
-    tsne = TSNE(n_components=2)  # Choose the number of components
-    reduced_data = tsne.fit_transform(data)
+    km = KModes(n_clusters=2, init='Huang', n_init=5, verbose=1)
 
-    linkage_data = linkage(reduced_data, method='ward', metric='euclidean')
+    clusters = km.fit_predict(persons)
+    km.labels_ = [i for i in persons]
+
+    # Print the cluster centroids
+    print(km.cluster_centroids_)
+
+    # from sklearn.manifold import TSNE
+
+    # tsne = TSNE(n_components=2)  # Choose the number of components
+    # reduced_data = tsne.fit_transform(data)
+
+    linkage_data = linkage(persons, method='ward', metric='euclidean')
+
+    print (linkage_data)
     dendrogram(linkage_data)
+    plt.tight_layout()
+    plt.savefig(f'diagrams\\dendrogram.png')
 
+    hierarchical_cluster = AgglomerativeClustering(n_clusters=3, metric='euclidean', linkage='ward')
+    hierarchical_cluster.fit_predict(persons)
+    print(hierarchical_cluster.labels_)
 
-    #for data_set in set_list:
-        #create_pie_chart(data_set)
+    # for data_set in set_list:
+    #    create_pie_chart(data_set)
     # print(array)
