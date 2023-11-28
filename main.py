@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 from kmodes.kmodes import KModes
-from scipy.cluster.hierarchy import dendrogram, linkage
+from scipy.cluster.hierarchy import dendrogram, linkage, fcluster
 from sklearn.cluster import AgglomerativeClustering
 from sklearn.decomposition import PCA
 
@@ -28,28 +28,81 @@ def contains_name_in_data_sets(data_sets: list[DataSet], name: str) -> bool:
     return False
 
 
-def create_pie_chart(data_set: DataSet):
+def create_pie_chart(data_set: DataSet, cluster_assignments: np.ndarray = None):
     # plt.style.use('_mpl-gallery-nogrid')
 
     # make data
+    x = []
     if len(data_set.categories) != 1:
-        x = [sum(data_set.categories[category]) for category in data_set.categories]
+
+        if cluster_assignments is None:
+            x.append([sum(data_set.categories[category]) for category in data_set.categories])
+        else:
+            for cluster_label in set(cluster_assignments):
+                cluster_data = []
+                for category in data_set.categories:
+                    cluster_data.append([x for (i, x) in enumerate(data_set.categories[category]) if
+                                         cluster_assignments[i] == cluster_label])
+                    # print(data_set.categories[category])
+                x.append([sum(category) for category in cluster_data])
         labels = data_set.categories.keys()
     else:
-        yes = sum(data_set.categories[list(data_set.categories.keys())[0]])
-        no = len(data_set.categories[list(data_set.categories.keys())[0]]) - yes
-        x = [yes, no]
+        if cluster_assignments is None:
+            yes = sum(data_set.categories[list(data_set.categories.keys())[0]])
+            no = len(data_set.categories[list(data_set.categories.keys())[0]]) - yes
+            x.append([yes, no])
+        else:
+            for cluster_label in set(cluster_assignments):
+                cluster_data = []
+                for category in data_set.categories:
+                    cluster_data.append([x for (i, x) in enumerate(data_set.categories[category]) if
+                                         cluster_assignments[i] == cluster_label])
+                    # print(data_set.categories[category])
+                yes = sum(cluster_data[0])
+                no = len(cluster_data[0]) - yes
+                x.append([yes, no])
         labels = ['Ja', 'Nein']
-    colors = plt.get_cmap('Spectral')(np.linspace(0.2, 0.7, len(x)))
+    # colors = plt.get_cmap('Spectral')(np.linspace(0.2, 0.7, len(x)))
 
     # plot
     fig, ax = plt.subplots()
-    ax.bar(labels, x, color=colors)
+    bottom = [0 for _ in range(len(x[0]))]
+    count_points = count_data_points_in_clusters(cluster_assignments)
+    #print(bottom)
+    #print(x)
+    for (i, bar) in enumerate(x):
+        ax.bar(labels, bar, bottom=bottom, label=f'Cluster {i + 1}, n={count_points[i+1]}')
+        bottom = [bottom[j] + bar[j] for j in range(len(bar))]
+    # ax.bar(labels, x, color=colors, bottom=)
     ax.set_ylabel('Anzahl Personen')
 
     plt.suptitle(data_set.name_pretty())
+    plt.legend()
     plt.tight_layout()
-    plt.savefig(f'diagrams\\{data_set.name}.png')
+    #plt.show()
+    plt.savefig(f'diagrams\\3_clusters\\{data_set.name}.png')
+
+
+def count_data_points_in_clusters(cluster_assignments: np.ndarray):
+    """
+    Count the number of data points in each cluster.
+
+    Parameters:
+    - cluster_assignments: numpy array or list
+        Array containing the cluster assignments for each data point.
+
+    Returns:
+    - dict
+        A dictionary where keys are cluster labels and values are the counts
+        of data points in each cluster.
+    """
+    cluster_counts = {}
+
+    for cluster_label in set(cluster_assignments):
+        count = sum(1 for x in cluster_assignments if x == cluster_label)
+        cluster_counts[cluster_label] = count
+
+    return cluster_counts
 
 
 if __name__ == '__main__':
@@ -119,30 +172,67 @@ if __name__ == '__main__':
     persons = np.array([np.array(xi) for xi in persons])
     # np_array = np.array([[1,1,1,1], [5,2,1,1], [1,2,1,1], [10,2,1,1], [4,-1,1,1]]) #np.array([np.array(xi) for xi in data])
 
-    km = KModes(n_clusters=2, init='Huang', n_init=5, verbose=1)
+    # km = KModes(n_clusters=2, init='Huang', n_init=5, verbose=1)
 
-    clusters = km.fit_predict(persons)
-    km.labels_ = [i for i in persons]
+    # clusters = km.fit_predict(persons)
+    # km.labels_ = [i for i in persons]
 
     # Print the cluster centroids
-    print(km.cluster_centroids_)
+    # print(km.cluster_centroids_)
 
-    # from sklearn.manifold import TSNE
+    linkage_data = linkage(persons, method='ward', metric='euclidean', optimal_ordering=True)
 
-    # tsne = TSNE(n_components=2)  # Choose the number of components
-    # reduced_data = tsne.fit_transform(data)
-
-    linkage_data = linkage(persons, method='ward', metric='euclidean')
-
-    print (linkage_data)
-    dendrogram(linkage_data)
+    threshold = 12
+    #print(linkage_data)
+    dendrogram(linkage_data, color_threshold=threshold)
     plt.tight_layout()
-    plt.savefig(f'diagrams\\dendrogram.png')
+    #plt.show()
+    plt.savefig('diagrams\\3_clusters\\dendrogram.png')
 
-    hierarchical_cluster = AgglomerativeClustering(n_clusters=3, metric='euclidean', linkage='ward')
-    hierarchical_cluster.fit_predict(persons)
-    print(hierarchical_cluster.labels_)
 
-    # for data_set in set_list:
-    #    create_pie_chart(data_set)
-    # print(array)
+
+    clusters = fcluster(linkage_data, criterion='distance', t=threshold)
+    print("Data point assignments to clusters:")
+    #print(clusters)
+
+    print(count_data_points_in_clusters(clusters))
+
+    # hierarchical_cluster = AgglomerativeClustering(n_clusters=3, metric='euclidean', linkage='ward')
+    # hierarchical_cluster.fit_predict(persons)
+    # print(hierarchical_cluster.labels_)
+    for data_set in set_list:
+        create_pie_chart(data_set, clusters)
+
+    biggest_cluster = max(count_data_points_in_clusters(clusters), key=count_data_points_in_clusters(clusters).get)
+    print(biggest_cluster)
+
+    persons_biggest_cluster = np.array([p for (i, p) in enumerate(persons) if clusters[i] == biggest_cluster])
+    print(len(persons_biggest_cluster))
+
+    km = KModes(n_clusters=1, init='Huang', n_init=5, verbose=1)
+
+    clusters = km.fit_predict(persons_biggest_cluster)
+    km.labels_ = [i for i in persons]
+
+    centroid = km.cluster_centroids_[0]
+    #Print the cluster centroids
+    print(centroid)
+
+    for(i, p) in enumerate(persons):
+        same = True
+        canfail = True
+        same_count = 0
+        for j in range(len(p)):
+            if p[j] != centroid[j]:
+                if canfail:
+                    canfail = False
+                else:
+                    same = False
+            else:
+                same_count += 1
+        if same:
+            print(i)
+        #else:
+            #print(p)
+
+
